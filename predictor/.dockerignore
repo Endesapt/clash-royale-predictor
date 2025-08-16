@@ -1,0 +1,4 @@
+Dockerfile
+deploy/
+.env*
+*.csv
