@@ -1,0 +1,32 @@
+# helm upgrade --install  mlflow community-charts/mlflow -n mlflow --create-namespace -f values.yaml
+ingress:
+  enabled: true
+  hosts:
+    - host: mlflow.ddns.net
+      paths:
+        - path: /
+          pathType: Prefix
+backendStore:
+  postgres:
+    enabled: true
+    host: my-release-postgresql.postgres
+    database: postgres
+    #if dont have secret
+    # user: postgres
+    # password: postgres
+  existingDatabaseSecret:
+    name: "postgres-credentials"
+    usernameKey: "user"
+    passwordKey: "password"
+artifactRoot:
+  s3:
+    enabled: true
+    bucket: "mlflow"
+    existingSecret:
+      name: "minio-credentials"
+      keyOfAccessKeyId: "user"
+      keyOfSecretAccessKey: "password"
+
+extraEnvVars:
+  MLFLOW_S3_ENDPOINT_URL: http://myminio.ddns.net
+  MLFLOW_S3_IGNORE_TLS: true

@@ -1,0 +1,28 @@
+# helm upgrade --install  --version 1.18.0 airflow apache-airflow/airflow --namespace airflow --version 1.16.0 --create-namespace -f values.yaml
+useStandardNaming: true
+ingress:
+  web:
+    enabled: true
+    host: myairflow.ddns.net
+    hosts:
+      - name: myairflow.ddns.net
+        tls:
+          enabled: false
+    ingressClassName: nginx
+postgresql:
+  enabled: false
+webserver:
+  enabled: true
+data:
+  metadataConnection:
+    user: postgres
+    pass: mAIex1c7pt
+    host: my-release-postgresql.postgres
+    db: airflow
+dags:
+  gitSync:
+    enabled: true
+    repo: https://gitlab.com/newgroup8024532/clash-royal-predictor.git
+    branch: main
+    ref: main
+    subPath: "dags"

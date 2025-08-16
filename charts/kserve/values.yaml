@@ -1,0 +1,9 @@
+# helm upgrade --install kserve oci://ghcr.io/kserve/charts/kserve --version v0.15.0 -f values.yaml -n kserve --create-namespace
+kserve:
+  controller:
+    deploymentMode: RawDeployment
+    gateway:
+      ingressGateway:
+        className: nginx
+      domain: ddns.net
+      domainTemplate: "{{ .Name }}.{{ .IngressDomain }}"

@@ -1,0 +1,21 @@
+# helm upgrade --install --version 17.0.19 my-release oci://registry-1.docker.io/bitnamicharts/minio -n minio --create-namespace -f values.yaml
+ingress:
+  enabled: true
+  hostname: myminio.ddns.net
+  path: /
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+
+console:
+  service:
+    type: NodePort
+
+auth:
+  existingSecret: minio-credentials
+  rootUserSecretKey: root-user
+  rootPasswordSecretKey: root-password
+  # in case u dont want to create a secret
+  # rootUser: admin
+  # rootPassword: admin1234

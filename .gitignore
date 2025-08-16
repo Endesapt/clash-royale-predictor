@@ -1,0 +1,8 @@
+include/
+# Ignore all models and datasets that are stored localy
+*.pth
+*.csv
+# Python cache
+**/__pycache__
+# Environment variables for local testing
+**/.env
