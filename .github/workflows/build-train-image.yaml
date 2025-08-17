@@ -1,4 +1,4 @@
-name: Build and Push Docker Image to GHCR
+name: Build and Push Train/Evaluate Docker Image to GHCR
 
 on:
   push:

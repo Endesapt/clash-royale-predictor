@@ -6,39 +6,29 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 import mlflow
-from  mlflow.models import infer_signature
+from mlflow.models import infer_signature
 import mlflow.pytorch
+from mlflow.tracking import MlflowClient
 
 # Import reusable components from the 'common' package
 from common.model import DeckTransformer
 from common.data import load_data
 from common.config import load_and_validate_config
-
 from common.evaluation import evaluate
 
 COMMON_FILES_DIR="common"
 
-def log_model_to_mlflow(model,input_example,epoch):
-    signature = infer_signature(model_input=input_example.cpu().numpy(), 
-                            model_output=model(input_example).detach().numpy())
-    mlflow.pytorch.log_model(
-        model, 
-        name="deck_predictor_model",
-        signature=signature,
-        code_paths=[COMMON_FILES_DIR],
-        step=epoch
-    )
-
-def train(args,config):
+def train(args, config):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # Setup MLflow
     mlflow.set_tracking_uri(config['tracking_url'])
     mlflow.set_experiment(config['experiment_name'])
+    client = MlflowClient()
     
     train_loader, val_loader, _ = load_data(args.data_file, args.rows_to_load, args.batch_size)
     
-    # Input example for mlflow
+    # Input example for mlflow signature
     input_example_tensor, _ = next(iter(train_loader))
     input_example = input_example_tensor.to(device)
 
@@ -81,10 +71,47 @@ def train(args,config):
             }
             print(f"Epoch {epoch+1}/{args.epochs} -> Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}, Val top_10 Acc: {accuracies['top10_accuracy']*100:.2f}%")
             mlflow.log_metrics(metrics_to_log, step=epoch)
-            if(args.log_model_every_epoch==True):
-                log_model_to_mlflow(model,input_example,epoch)
-        if(args.log_model_every_epoch!=True):
-            log_model_to_mlflow(model,input_example,epoch) 
+            
+        # --- Final Model Logging and Registration ---
+        print("\nTraining finished. Logging final model artifact...")
+        artifact_path = "deck_predictor_model"
+        signature = infer_signature(
+            model_input=input_example.cpu().numpy(), 
+            model_output=model(input_example).detach().cpu().numpy()
+        )
+        
+        # 1. Always log the model as an artifact within the run
+        mlflow.pytorch.log_model(
+            model, 
+            artifact_path=artifact_path,
+            signature=signature,
+            code_paths=[COMMON_FILES_DIR]
+        )
+        print(f"Model artifact logged to run {run_id} at path '{artifact_path}'")
+
+        # 2. Conditionally register the model and apply an alias
+        if args.register_model:
+            if not args.registered_model_name:
+                print("Error: --registered_model_name must be provided when --register_model is True.", file=sys.stderr)
+                sys.exit(1)
+            
+            print(f"Registering model to '{args.registered_model_name}'...")
+            model_uri = f"runs:/{run_id}/{artifact_path}"
+            
+            registered_version = mlflow.register_model(
+                model_uri=model_uri,
+                name=args.registered_model_name
+            )
+            print(f"Registered new version: {registered_version.version}")
+
+            if args.model_alias:
+                print(f"Setting alias '{args.model_alias}' for version {registered_version.version}...")
+                client.set_registered_model_alias(
+                    name=args.registered_model_name,
+                    alias=args.model_alias,
+                    version=registered_version.version
+                )
+                print("Alias set successfully.")
         
         print(f"\n--- Model trained successfully! Use this Run ID for evaluation: {run_id} ---")
 
@@ -96,13 +123,18 @@ if __name__ == '__main__':
         sys.exit(1)
 
     parser = argparse.ArgumentParser(description="Train a Transformer model for deck prediction.")
-    # MlfLow params
-    parser.add_argument("--log_model_every_epoch", type=bool, default=False)
+    
+    # MLflow Registration and Aliasing Arguments
+    parser.add_argument("--register_model", action='store_true', help="If set, register the trained model in the MLflow Model Registry.")
+    parser.add_argument("--registered_model_name", type=str, default=None, help="Name of the model in the registry. Required if --register_model is set.")
+    parser.add_argument("--model_alias", type=str, default="challenger", help="Alias to apply to the registered model version (e.g., 'challenger').")
+
     # Data and model arguments
     parser.add_argument("--data_file", type=str, default="decks.csv")
-    parser.add_argument("--rows_to_load", type=int, default=1000000)
+    parser.add_argument("--rows_to_load", type=int, default=10000)
     parser.add_argument("--vocab_size", type=int, default=121)
     parser.add_argument("--padding_idx", type=int, default=120)
+
     # Hyperparameters
     parser.add_argument("--learning_rate", type=float, default=0.001)
     parser.add_argument("--batch_size", type=int, default=128)
@@ -113,4 +145,4 @@ if __name__ == '__main__':
     parser.add_argument("--dropout", type=float, default=0.15)
     
     args = parser.parse_args()
-    train(args,config)
+    train(args, config)
