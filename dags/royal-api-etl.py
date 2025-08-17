@@ -20,6 +20,7 @@ from airflow.models.param import Param
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
 from kubernetes.client import models as k8s
 from airflow.providers.cncf.kubernetes.secret import Secret
+from kubernetes.client import V1Container, V1VolumeMount, V1EnvFromSource, V1SecretEnvSource, V1EnvVar
 
 # Define connection IDs used in the Airflow UI
 API_CONN_ID = "clash_royale_api"
@@ -37,6 +38,7 @@ MLFLOW_TRACKING_URI="http://mlflow.ddns.net"
 MLFLOW_EXPERIMENT_NAME="Clash Royale"
 MLFLOW_S3_ENDPOINT_URL="http://myminio.ddns.net"
 MODEL_NAME="clash-predictor"
+TRAINING_IMAGE="ghcr.io/endesapt/clash-royale-predictor-trainer:main"
 
 
 log = logging.getLogger(__name__)
@@ -250,6 +252,19 @@ def create_ml_pod_operator(
         name='init-container-download-data',
         image='minio/mc:latest',
         volume_mounts=volume_mounts,
+        env_from=[
+        V1EnvFromSource(
+            secret_ref=V1SecretEnvSource(
+                name="mlflow-s3-credentials"
+            )
+        )
+        ],
+        env=[
+        V1EnvVar(
+            name='MLFLOW_S3_ENDPOINT_URL',
+            value=MLFLOW_S3_ENDPOINT_URL
+        )
+        ],
         command=[
             '/bin/sh',
             '-c',
@@ -263,7 +278,7 @@ def create_ml_pod_operator(
         task_id=task_id,
         name=pod_name,
         namespace="airflow",
-        image="your-docker-registry/your-ml-app:latest",
+        image=TRAINING_IMAGE,
         image_pull_policy="Always",
         secrets=[AWS_CREDENTIALS_SECRET],
         env_vars={
@@ -277,7 +292,7 @@ def create_ml_pod_operator(
         init_containers=init_containers,
         volumes=volumes,
         volume_mounts=volume_mounts,
-        resources=k8s.V1ResourceRequirements(
+        container_resources=k8s.V1ResourceRequirements(
             requests={"cpu": "2000m", "memory": "4Gi"},
             limits={"cpu": "4000m", "memory": "8Gi"},
         ),
@@ -345,8 +360,6 @@ def ml_training_pipeline():
     train_op >> evaluate_op
 
 # Instantiate the DAG
-
-# Instantiate the DAG
 dag=api_to_minio_enrichment_dag()
 
 ml_training_pipeline()
@@ -355,5 +368,5 @@ if __name__ == "__main__":
     current_file_path = os.path.abspath(__file__)
     parent_directory = os.path.dirname(current_file_path)
     dag.test(
-        conn_file_path=os.path.join(parent_directory,"..","include","connections.yaml")
+        conn_file_path=os.path.join(parent_directory,"..","include","connections.yaml"),
     )
