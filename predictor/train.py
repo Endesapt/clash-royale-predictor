@@ -35,7 +35,10 @@ def train(args, config):
     with mlflow.start_run() as run:
         run_id = run.info.run_id
         print(f"Starting Training Run. MLflow Run ID: {run_id}")
+        # --- Add tags for better filtering ---
         mlflow.set_tag("pipeline_stage", "training")
+        mlflow.set_tag("run_source", args.run_source) # <-- NEW
+        
         mlflow.log_params(vars(args))
 
         model = DeckTransformer(
@@ -128,6 +131,7 @@ if __name__ == '__main__':
     parser.add_argument("--register_model", action='store_true', help="If set, register the trained model in the MLflow Model Registry.")
     parser.add_argument("--registered_model_name", type=str, default=None, help="Name of the model in the registry. Required if --register_model is set.")
     parser.add_argument("--model_alias", type=str, default="challenger", help="Alias to apply to the registered model version (e.g., 'challenger').")
+    parser.add_argument("--run_source", type=str, default="manual", help="Source of the run execution (e.g., 'airflow', 'manual'). Used for tagging.") 
 
     # Data and model arguments
     parser.add_argument("--data_file", type=str, default="decks.csv")

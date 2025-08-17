@@ -31,7 +31,10 @@ def evaluate_and_promote(args, config):
     # --- Start a new MLflow run for this evaluation and promotion process ---
     with mlflow.start_run() as run:
         print(f"Starting Evaluation Run. Results will be logged to Run ID: {run.info.run_id}")
+        # --- Add tags for better filtering ---
         mlflow.set_tag("pipeline_stage", "evaluation_and_promotion")
+        mlflow.set_tag("run_source", args.run_source) # <-- NEW
+
         mlflow.log_params(vars(args))
 
         # 2. Evaluate the CHALLENGER model
@@ -66,7 +69,6 @@ def evaluate_and_promote(args, config):
         
         # It's good practice to also log the score back to the original training run
         client.log_metric(challenger_version.run_id, args.sort_metric, challenger_score)
-
 
         # 3. Get the CHAMPION (current baseline) model's performance
         champion_score = -1.0 if higher_is_better else float('inf')
@@ -145,6 +147,8 @@ if __name__ == '__main__':
         default="top10_accuracy", 
         help="The metric to use for comparing the models."
     )
+    parser.add_argument("--run_source", type=str, default="manual", help="Source of the run execution (e.g., 'airflow', 'manual'). Used for tagging the evaluation run.") 
+
     # Inherited arguments
     parser.add_argument("--padding_idx", type=int, default=120)
     parser.add_argument("--data_file", type=str, default="decks.csv")

@@ -3,6 +3,7 @@ import itertools
 import json
 import logging
 from datetime import datetime
+from typing import List
 import pandas
 import boto3
 import os
@@ -15,6 +16,10 @@ from airflow.decorators import dag, task
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.providers.http.hooks.http import HttpHook
 from airflow.datasets import Dataset
+from airflow.models.param import Param
+from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
+from kubernetes.client import models as k8s
+from airflow.providers.cncf.kubernetes.secret import Secret
 
 # Define connection IDs used in the Airflow UI
 API_CONN_ID = "clash_royale_api"
@@ -27,10 +32,17 @@ DATETIME_STRING=datetime.now().strftime('%d-%m-%Y')
 OUTPUT_DATASET_FILENAME = f"enriched_data.csv"
 OUTPUT_DICT_FILENAME = f"number_to_card.csv"
 
+# define mlflow vars
+MLFLOW_TRACKING_URI="http://mlflow.ddns.net"
+MLFLOW_EXPERIMENT_NAME="Clash Royale"
+MLFLOW_S3_ENDPOINT_URL="http://myminio.ddns.net"
+MODEL_NAME="clash-predictor"
+
+
 log = logging.getLogger(__name__)
 
-dict_dataset= Dataset(f's3://datasets/{DATASET_NAME}/{OUTPUT_DICT_FILENAME}')
-enriched_data_dataset= Dataset(f's3://datasets/{DATASET_NAME}/{OUTPUT_DATASET_FILENAME}')
+dict_dataset= Dataset(f's3://{MINIO_BUCKET}/{DATASET_NAME}/{OUTPUT_DICT_FILENAME}')
+enriched_data_dataset= Dataset(f's3://{MINIO_BUCKET}/{DATASET_NAME}/{OUTPUT_DATASET_FILENAME}')
 
 @dag(
     dag_id="api_to_minio_enrichment_dag",
@@ -172,6 +184,13 @@ def api_to_minio_enrichment_dag():
             bucket_name=MINIO_BUCKET,
             replace=True  # Overwrite the file if it already exists
         )
+        s3_hook.load_string(
+            string_data=csv_dataset_string,
+            key=f'{DATASET_NAME}/{OUTPUT_DATASET_FILENAME}',
+            bucket_name=MINIO_BUCKET,
+            replace=True  # Overwrite the file if it already exists
+        )
+        
 
 
         #save inverted number map
@@ -191,6 +210,13 @@ def api_to_minio_enrichment_dag():
             bucket_name=MINIO_BUCKET,
             replace=True  # Overwrite the file if it already exists
         )
+        s3_hook.load_string(
+            string_data=csv_dict_string,
+            key=f"{DATASET_NAME}/{OUTPUT_DICT_FILENAME}",
+            bucket_name=MINIO_BUCKET,
+            replace=True  # Overwrite the file if it already exists
+        )
+        
 
 
 
@@ -199,8 +225,131 @@ def api_to_minio_enrichment_dag():
     enrich_data(raw_data)
 
 
+AWS_CREDENTIALS_SECRET = Secret(
+    deploy_type='env',
+    deploy_target=None,
+    secret='mlflow-s3-credentials'
+)
+# A reusable function to create a configured KubernetesPodOperator
+def create_ml_pod_operator(
+    task_id: str,
+    pod_name: str,
+    arguments: List[str]
+) -> KubernetesPodOperator:
+    """
+    Creates a KubernetesPodOperator with common configuration for ML tasks.
+    Now supports init containers and volumes.
+    """
+
+    volumes = [k8s.V1Volume(name='data-volume', empty_dir=k8s.V1EmptyDirVolumeSource())]
+    volume_mounts = [k8s.V1VolumeMount(name='data-volume', mount_path='/data')]
+
+    # 2. Define the Init Container
+    # This container runs BEFORE the main training container.
+    init_containers = [k8s.V1Container(
+        name='init-container-download-data',
+        image='minio/mc:latest',
+        volume_mounts=volume_mounts,
+        command=[
+            '/bin/sh',
+            '-c',
+            'mc alias set minio ${MLFLOW_S3_ENDPOINT_URL} ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY} && '
+            # Copy the file from S3 to the shared /data directory
+            f'mc cp {MINIO_BUCKET}/{DATASET_NAME}/{OUTPUT_DATASET_FILENAME} /data/{OUTPUT_DATASET_FILENAME}'
+        ]
+    )]
+
+    return KubernetesPodOperator(
+        task_id=task_id,
+        name=pod_name,
+        namespace="airflow",
+        image="your-docker-registry/your-ml-app:latest",
+        image_pull_policy="Always",
+        secrets=[AWS_CREDENTIALS_SECRET],
+        env_vars={
+            "MLFLOW_TRACKING_URI": f"{ MLFLOW_TRACKING_URI }",
+            "MLFLOW_EXPERIMENT_NAME": f"{ MLFLOW_EXPERIMENT_NAME }",
+            "MLFLOW_S3_ENDPOINT_URL": f"{ MLFLOW_S3_ENDPOINT_URL }",
+        },
+        cmds=["python"],
+        arguments=arguments,
+        # NEW: Add init containers, volumes, and mounts to the pod spec
+        init_containers=init_containers,
+        volumes=volumes,
+        volume_mounts=volume_mounts,
+        resources=k8s.V1ResourceRequirements(
+            requests={"cpu": "2000m", "memory": "4Gi"},
+            limits={"cpu": "4000m", "memory": "8Gi"},
+        ),
+        get_logs=True,
+        do_xcom_push=False,
+    )
+
+@dag(
+    dag_id="ml_training_pipeline_reusable_pods",
+    start_date=datetime(2025, 8, 17), # Set to a relevant date
+    schedule=None, # Manually triggered for this example, can be set to a dataset
+    catchup=False,
+    doc_md="### ML DAG with Reusable Pods and Secure Secrets",
+    tags=["ml", "kubernetes"],
+    params={
+        "epochs": Param(default=5, type="integer", title="Epochs"),
+        "learning_rate": Param(default=0.001, type="number", title="Learning Rate"),
+    },
+)
+def ml_training_pipeline():
+    """
+    This pipeline trains and evaluates a model using reusable, secure pod definitions.
+    """
+
+    @task
+    def train_model_task() -> KubernetesPodOperator:
+        """Defines the training pod by calling the helper function."""
+        train_arguments = [
+            "/app/train.py",
+            "--epochs", f"{ dag.params.epochs }",
+            "--learning_rate", f"{ dag.params.learning_rate }",
+            "--data_file", f"/data/{OUTPUT_DATASET_FILENAME}",
+            "--register_model",
+            "--registered_model_name", f"{ MODEL_NAME }",
+            "--model_alias", "challenger",
+            "--run_source", "airflow",
+        ]
+        return create_ml_pod_operator(
+            task_id="train_model",
+            pod_name="ml-training-pod-reusable",
+            arguments=train_arguments
+        )
+
+    @task
+    def evaluate_and_promote_model_task() -> KubernetesPodOperator:
+        """Defines the evaluation pod by calling the helper function."""
+        evaluate_arguments = [
+            "/app/evaluate.py",
+            "--registered_model_name",f"{ MODEL_NAME }",
+            "--challenger_alias", "challenger",
+            "--champion_alias", "champion",
+            "--data_file",  f"/data/{OUTPUT_DATASET_FILENAME}",
+            "--run_source", "airflow",
+        ]
+        return create_ml_pod_operator(
+            task_id="evaluate_and_promote_model",
+            pod_name="ml-evaluation-pod-reusable",
+            arguments=evaluate_arguments
+        )
+
+    # --- 3. Define Task Dependencies ---
+    train_op = train_model_task()
+    evaluate_op = evaluate_and_promote_model_task()
+
+    train_op >> evaluate_op
+
+# Instantiate the DAG
+
 # Instantiate the DAG
 dag=api_to_minio_enrichment_dag()
+
+ml_training_pipeline()
 
 if __name__ == "__main__":
     current_file_path = os.path.abspath(__file__)
