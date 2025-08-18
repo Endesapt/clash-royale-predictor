@@ -4,6 +4,7 @@ import json
 import logging
 from datetime import datetime
 from typing import List
+from airflow import DAG
 import pandas
 import boto3
 import os
@@ -20,6 +21,7 @@ from airflow.models.param import Param
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
 from kubernetes.client import models as k8s
 from airflow.providers.cncf.kubernetes.secret import Secret
+from airflow.providers.standard.operators.python import get_current_context
 from kubernetes.client import V1Container, V1VolumeMount, V1EnvFromSource, V1SecretEnvSource, V1EnvVar
 import tenacity
 
@@ -308,11 +310,10 @@ def create_ml_pod_operator(
         get_logs=True,
         do_xcom_push=False,
     )
-
-@dag(
+with DAG(
     dag_id="ml_training_pipeline",
-    start_date=datetime(2025, 8, 17), # Set to a relevant date
-    schedule=None, # Manually triggered for this example, can be set to a dataset
+    start_date=datetime(2024, 8, 17), # Best practice to use timezone-aware datetimes
+    schedule=None,
     catchup=False,
     doc_md="### ML DAG with Reusable Pods and Secure Secrets",
     tags=["ml", "kubernetes"],
@@ -321,18 +322,19 @@ def create_ml_pod_operator(
         "epochs": Param(default=5, type="integer", title="Epochs"),
         "learning_rate": Param(default=0.001, type="number", title="Learning Rate"),
     },
-)
-def ml_training_pipeline():
+    # Enables Jinja templating for params
+    render_template_as_native_obj=True,
+) as dag:
     """
     This pipeline trains and evaluates a model using reusable, secure pod definitions.
     """
     train_arguments = [
         "/app/train.py",
-        "--epochs", f"{ dag.params['epochs'] }",
-        "--learning_rate", f"{ dag.params['learning_rate'] }",
+        "--epochs", f"{ dag.params.get('epochs') }",
+        "--learning_rate", f"{ dag.params.get('learning_rate') }",
         "--data_file", f"/data/{OUTPUT_DATASET_FILENAME}",
         "--register_model",
-        "--rows_to_load",f"{ dag.params['rows_to_load'] }",
+        "--rows_to_load",f"{ dag.params.get('rows_to_load') }",
         "--registered_model_name", f"{ MODEL_NAME }",
         "--model_alias", "challenger",
         "--run_source", "airflow",
@@ -344,7 +346,7 @@ def ml_training_pipeline():
         "--champion_alias", "champion",
         "--data_file",  f"/data/{OUTPUT_DATASET_FILENAME}",
         "--run_source", "airflow",
-        "--rows_to_load",f"{ dag.params['rows_to_load'] }",
+        "--rows_to_load",f"{ dag.params.get('rows_to_load') }",
     ]
 
     train_op =create_ml_pod_operator(
@@ -363,13 +365,13 @@ def ml_training_pipeline():
 # Instantiate the DAG
 api_to_minio_enrichment_dag()
 
-dag=ml_training_pipeline()
+test_dag=ml_training_pipeline()
 
 if __name__ == "__main__":
     current_file_path = os.path.abspath(__file__)
     parent_directory = os.path.dirname(current_file_path)
     with open(os.path.join(parent_directory,"..","include","connections.yaml")) as file:
         print(file.name)
-    dag.test(
+    test_dag.test(
         conn_file_path=os.path.join(parent_directory,"..","include","connections.yaml"),
     )
