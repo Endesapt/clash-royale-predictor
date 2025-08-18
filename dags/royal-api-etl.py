@@ -21,7 +21,6 @@ from airflow.models.param import Param
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
 from kubernetes.client import models as k8s
 from airflow.providers.cncf.kubernetes.secret import Secret
-from airflow.providers.standard.operators.python import get_current_context
 from kubernetes.client import V1Container, V1VolumeMount, V1EnvFromSource, V1SecretEnvSource, V1EnvVar
 import tenacity
 
