@@ -329,11 +329,11 @@ with DAG(
     """
     train_arguments = [
         "/app/train.py",
-        "--epochs", f"{ dag.params.get('epochs') }",
-        "--learning_rate", f"{ dag.params.get('learning_rate') }",
+        "--epochs", f"{ dag.params.get('epochs').__str__  }",
+        "--learning_rate", f"{ dag.params.get('learning_rate').__str__  }",
         "--data_file", f"/data/{OUTPUT_DATASET_FILENAME}",
         "--register_model",
-        "--rows_to_load",f"{ dag.params.get('rows_to_load') }",
+        "--rows_to_load",f"{ dag.params.get('rows_to_load').__str__ }",
         "--registered_model_name", f"{ MODEL_NAME }",
         "--model_alias", "challenger",
         "--run_source", "airflow",
@@ -345,18 +345,19 @@ with DAG(
         "--champion_alias", "champion",
         "--data_file",  f"/data/{OUTPUT_DATASET_FILENAME}",
         "--run_source", "airflow",
-        "--rows_to_load",f"{ dag.params.get('rows_to_load') }",
+        "--rows_to_load",f"{ dag.params.get('rows_to_load').__str__  }",
     ]
 
+    
     train_op =create_ml_pod_operator(
-        task_id="evaluate_and_promote_model",
-        pod_name="ml-evaluation-pod-reusable",
-        arguments=evaluate_arguments
-    )
-    evaluate_op =create_ml_pod_operator(
         task_id="train_model",
         pod_name="ml-training-pod-reusable",
         arguments=train_arguments
+    )
+    evaluate_op =create_ml_pod_operator(
+        task_id="evaluate_and_promote_model",
+        pod_name="ml-evaluation-pod-reusable",
+        arguments=evaluate_arguments
     )
 
     train_op >> evaluate_op
