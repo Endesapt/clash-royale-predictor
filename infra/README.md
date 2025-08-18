@@ -39,7 +39,7 @@ From minio folder:
 ```
 
 ## Install Mlflow
-From airflow folder:
+From minio folder:
 ```bash 
     helm repo add community-charts https://community-charts.github.io/helm-charts
     helm upgrade --install  mlflow community-charts/mlflow -n mlflow --create-namespace -f values.yaml
