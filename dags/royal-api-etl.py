@@ -310,7 +310,7 @@ def create_ml_pod_operator(
     )
 
 @dag(
-    dag_id="ml_training_pipeline_reusable_pods",
+    dag_id="ml_training_pipeline",
     start_date=datetime(2025, 8, 17), # Set to a relevant date
     schedule=None, # Manually triggered for this example, can be set to a dataset
     catchup=False,
@@ -346,7 +346,7 @@ def ml_training_pipeline():
         "--run_source", "airflow",
         "--rows_to_load",f"{ dag.params['rows_to_load'] }",
     ]
-    
+
     train_op =create_ml_pod_operator(
         task_id="evaluate_and_promote_model",
         pod_name="ml-evaluation-pod-reusable",
