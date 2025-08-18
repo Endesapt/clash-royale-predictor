@@ -101,7 +101,10 @@ def api_to_minio_enrichment_dag():
         all_decks=[]
         for player in best_players:
             encoded_tag = urllib.parse.quote_plus(player['tag'])
-            battle_log_responce= http_hook.run_with_advanced_retry(endpoint=f"/v1/players/{encoded_tag}/battlelog",_retry_args=retry_args)
+            battle_log_responce= http_hook.run(endpoint=f"/v1/players/{encoded_tag}/battlelog",extra_options= {"check_response": False})
+            if(battle_log_responce.status_code!=200):
+                log.warning(f"Error while getting player {player} battlelog, skipping...")
+                continue
             battle_log=  battle_log_responce.json()
 
             for battle in battle_log:
