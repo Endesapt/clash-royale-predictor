@@ -280,12 +280,13 @@ def create_ml_pod_operator(
             '-c',
             'mc alias set minio ${MLFLOW_S3_ENDPOINT_URL} ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY} && '
             # Copy the file from S3 to the shared /data directory
-            f'mc cp {MINIO_BUCKET}/{DATASET_NAME}/{OUTPUT_DATASET_FILENAME} /data/{OUTPUT_DATASET_FILENAME}'
+            f'mc cp minio/{MINIO_BUCKET}/{DATASET_NAME}/{OUTPUT_DATASET_FILENAME} /data/{OUTPUT_DATASET_FILENAME}'
         ]
     )]
 
     return KubernetesPodOperator(
         task_id=task_id,
+        startup_timeout_seconds=600, # image is big and we must give time to load it
         name=pod_name,
         namespace="airflow",
         image=TRAINING_IMAGE,
@@ -328,35 +329,35 @@ with DAG(
     This pipeline trains and evaluates a model using reusable, secure pod definitions.
     """
     train_arguments = [
-        "/app/train.py",
-        "--epochs", f"{ dag.params.get('epochs').__str__  }",
-        "--learning_rate", f"{ dag.params.get('learning_rate').__str__  }",
+        "train.py",
+        f"--epochs", "\'{{ params.epochs  }}\'",
+        f"--learning_rate", "\'{{ params.learning_rate }}\'",
         "--data_file", f"/data/{OUTPUT_DATASET_FILENAME}",
         "--register_model",
-        "--rows_to_load",f"{ dag.params.get('rows_to_load').__str__ }",
+        f"--rows_to_load","\'{{ params.rows_to_load }}\'",
         "--registered_model_name", f"{ MODEL_NAME }",
         "--model_alias", "challenger",
         "--run_source", "airflow",
     ]   
     evaluate_arguments = [
-        "/app/evaluate.py",
+        "evaluate.py",
         "--registered_model_name",f"{ MODEL_NAME }",
         "--challenger_alias", "challenger",
         "--champion_alias", "champion",
         "--data_file",  f"/data/{OUTPUT_DATASET_FILENAME}",
         "--run_source", "airflow",
-        "--rows_to_load",f"{ dag.params.get('rows_to_load').__str__  }",
+        f"--rows_to_load" ,"\'{{ params.rows_to_load }}\'",
     ]
 
     
     train_op =create_ml_pod_operator(
         task_id="train_model",
-        pod_name="ml-training-pod-reusable",
+        pod_name="ml-training-pod",
         arguments=train_arguments
     )
     evaluate_op =create_ml_pod_operator(
         task_id="evaluate_and_promote_model",
-        pod_name="ml-evaluation-pod-reusable",
+        pod_name="ml-evaluation-pod",
         arguments=evaluate_arguments
     )
 
@@ -370,6 +371,7 @@ if __name__ == "__main__":
     parent_directory = os.path.dirname(current_file_path)
     with open(os.path.join(parent_directory,"..","include","connections.yaml")) as file:
         print(file.name)
-    test_dag.test(
+    dag.test(
         conn_file_path=os.path.join(parent_directory,"..","include","connections.yaml"),
+        run_conf={"rows_to_load":10000}
     )
