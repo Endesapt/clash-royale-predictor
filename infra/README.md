@@ -19,7 +19,7 @@ kubectl apply -f cluster-issuer.yaml
 ## Install Kserve for model serving
 
 - Install [CertManager](https://cert-manager.io/)
-- Install IngressController or gateway (i used nginx)
+- Install IngressController or gateway (we used nginx)
 - Install helm chart from kserve folder using:
     ```bash 
     helm upgrade --install kserve oci://ghcr.io/kserve/charts/kserve --version v0.15.0 -f values.yaml -n kserve --create-namespace
@@ -33,7 +33,7 @@ From airflow folder:
 ```
 
 ## Install Minio
-From airflow folder:
+From minio folder:
 ```bash 
     helm upgrade --install --version 17.0.19 my-release oci://registry-1.docker.io/bitnamicharts/minio -n minio --create-namespace -f values.yaml
 ```
