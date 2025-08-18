@@ -1,6 +1,12 @@
 # helm upgrade --install  mlflow community-charts/mlflow -n mlflow --create-namespace -f values.yaml
 ingress:
   enabled: true
+  tls:
+  - hosts:
+    - mlflow.ddns.net
+    secretName: mlflow-tls
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
   hosts:
     - host: mlflow.ddns.net
       paths:
