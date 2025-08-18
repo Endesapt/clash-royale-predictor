@@ -332,11 +332,11 @@ def ml_training_pipeline():
         """Defines the training pod by calling the helper function."""
         train_arguments = [
             "/app/train.py",
-            "--epochs", f"{ dag.params.epochs }",
-            "--learning_rate", f"{ dag.params.learning_rate }",
+            "--epochs", f"{ dag.params['epochs'] }",
+            "--learning_rate", f"{ dag.params['learning_rate'] }",
             "--data_file", f"/data/{OUTPUT_DATASET_FILENAME}",
             "--register_model",
-            "--rows_to_load",f"{ dag.params.rows_to_load }",
+            "--rows_to_load",f"{ dag.params['rows_to_load'] }",
             "--registered_model_name", f"{ MODEL_NAME }",
             "--model_alias", "challenger",
             "--run_source", "airflow",
@@ -357,7 +357,7 @@ def ml_training_pipeline():
             "--champion_alias", "champion",
             "--data_file",  f"/data/{OUTPUT_DATASET_FILENAME}",
             "--run_source", "airflow",
-            "--rows_to_load",f"{ dag.params.rows_to_load }",
+            "--rows_to_load",f"{ dag.params['rows_to_load'] }",
         ]
         return create_ml_pod_operator(
             task_id="evaluate_and_promote_model",
@@ -372,9 +372,9 @@ def ml_training_pipeline():
     train_op >> evaluate_op
 
 # Instantiate the DAG
-dag=api_to_minio_enrichment_dag()
+api_to_minio_enrichment_dag()
 
-ml_training_pipeline()
+dag=ml_training_pipeline()
 
 if __name__ == "__main__":
     current_file_path = os.path.abspath(__file__)
