@@ -81,19 +81,19 @@ def api_to_minio_enrichment_dag():
         )
         
         # get all cards and create id to index map
-        cards_responce = http_hook.run_with_advanced_retry(endpoint="v1/cards", retry_args=retry_args)
+        cards_responce = http_hook.run_with_advanced_retry(endpoint="v1/cards", _retry_args=retry_args)
         names = [item['name'] for item in cards_responce.json()["items"]]
         card_name_to_number=dict(zip(names, range(len(names))))
         card_name_to_number["<Start of deck>"]=len(card_name_to_number)
 
         # get latest season
-        seasons_responce = http_hook.run_with_advanced_retry(endpoint="v1/locations/global/seasonsV2", retry_args=retry_args)    
+        seasons_responce = http_hook.run_with_advanced_retry(endpoint="v1/locations/global/seasonsV2", _retry_args=retry_args)    
         
         last_season_id = seasons_responce.json()["items"][-1]["code"]
         log.info(f"Successfully fetched last_season_id: {last_season_id}.")
 
         # get best players
-        players_responce = http_hook.run_with_advanced_retry(endpoint=f"/v1/locations/global/pathoflegend/{last_season_id}/rankings/players?limit=1000", retry_args=retry_args)
+        players_responce = http_hook.run_with_advanced_retry(endpoint=f"/v1/locations/global/pathoflegend/{last_season_id}/rankings/players?limit=1000", _retry_args=retry_args)
 
         best_players= players_responce.json()["items"]
 
@@ -101,7 +101,7 @@ def api_to_minio_enrichment_dag():
         all_decks=[]
         for player in best_players:
             encoded_tag = urllib.parse.quote_plus(player['tag'])
-            battle_log_responce= http_hook.run_with_advanced_retry(endpoint=f"/v1/players/{encoded_tag}/battlelog",retry_args=retry_args)
+            battle_log_responce= http_hook.run_with_advanced_retry(endpoint=f"/v1/players/{encoded_tag}/battlelog",_retry_args=retry_args)
             battle_log=  battle_log_responce.json()
 
             for battle in battle_log:
@@ -373,6 +373,8 @@ ml_training_pipeline()
 if __name__ == "__main__":
     current_file_path = os.path.abspath(__file__)
     parent_directory = os.path.dirname(current_file_path)
+    with open(os.path.join(parent_directory,"..","include","connections.yaml")) as file:
+        print(file.name)
     dag.test(
         conn_file_path=os.path.join(parent_directory,"..","include","connections.yaml"),
     )
