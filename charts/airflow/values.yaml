@@ -22,7 +22,7 @@ data:
 dags:
   gitSync:
     enabled: true
-    repo: https://gitlab.com/newgroup8024532/clash-royal-predictor.git
+    repo: https://github.com/Endesapt/clash-royale-predictor.git
     branch: main
     ref: main
     subPath: "dags"

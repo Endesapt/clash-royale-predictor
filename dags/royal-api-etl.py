@@ -21,6 +21,7 @@ from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperato
 from kubernetes.client import models as k8s
 from airflow.providers.cncf.kubernetes.secret import Secret
 from kubernetes.client import V1Container, V1VolumeMount, V1EnvFromSource, V1SecretEnvSource, V1EnvVar
+import tenacity
 
 # Define connection IDs used in the Airflow UI
 API_CONN_ID = "clash_royale_api"
@@ -73,21 +74,26 @@ def api_to_minio_enrichment_dag():
         """
         log.info(f"Fetching data using HTTP connection '{API_CONN_ID}'")
         http_hook = HttpHook(method="GET", http_conn_id=API_CONN_ID)
+        retry_args = dict(
+            wait=tenacity.wait_exponential(),
+            stop=tenacity.stop_after_attempt(3),
+            retry=tenacity.retry_if_exception_type(Exception),
+        )
         
         # get all cards and create id to index map
-        cards_responce = http_hook.run(endpoint="v1/cards")
+        cards_responce = http_hook.run_with_advanced_retry(endpoint="v1/cards", retry_args=retry_args)
         names = [item['name'] for item in cards_responce.json()["items"]]
         card_name_to_number=dict(zip(names, range(len(names))))
         card_name_to_number["<Start of deck>"]=len(card_name_to_number)
 
         # get latest season
-        seasons_responce = http_hook.run(endpoint="v1/locations/global/seasonsV2")    
+        seasons_responce = http_hook.run_with_advanced_retry(endpoint="v1/locations/global/seasonsV2", retry_args=retry_args)    
         
         last_season_id = seasons_responce.json()["items"][-1]["code"]
         log.info(f"Successfully fetched last_season_id: {last_season_id}.")
 
         # get best players
-        players_responce = http_hook.run(endpoint=f"/v1/locations/global/pathoflegend/{last_season_id}/rankings/players?limit=1000")
+        players_responce = http_hook.run_with_advanced_retry(endpoint=f"/v1/locations/global/pathoflegend/{last_season_id}/rankings/players?limit=1000", retry_args=retry_args)
 
         best_players= players_responce.json()["items"]
 
@@ -95,7 +101,7 @@ def api_to_minio_enrichment_dag():
         all_decks=[]
         for player in best_players:
             encoded_tag = urllib.parse.quote_plus(player['tag'])
-            battle_log_responce= http_hook.run(endpoint=f"/v1/players/{encoded_tag}/battlelog")
+            battle_log_responce= http_hook.run_with_advanced_retry(endpoint=f"/v1/players/{encoded_tag}/battlelog",retry_args=retry_args)
             battle_log=  battle_log_responce.json()
 
             for battle in battle_log:
