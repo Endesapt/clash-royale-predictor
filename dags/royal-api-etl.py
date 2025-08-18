@@ -326,48 +326,37 @@ def ml_training_pipeline():
     """
     This pipeline trains and evaluates a model using reusable, secure pod definitions.
     """
-
-    @task
-    def train_model_task() -> KubernetesPodOperator:
-        """Defines the training pod by calling the helper function."""
-        train_arguments = [
-            "/app/train.py",
-            "--epochs", f"{ dag.params['epochs'] }",
-            "--learning_rate", f"{ dag.params['learning_rate'] }",
-            "--data_file", f"/data/{OUTPUT_DATASET_FILENAME}",
-            "--register_model",
-            "--rows_to_load",f"{ dag.params['rows_to_load'] }",
-            "--registered_model_name", f"{ MODEL_NAME }",
-            "--model_alias", "challenger",
-            "--run_source", "airflow",
-        ]
-        return create_ml_pod_operator(
-            task_id="train_model",
-            pod_name="ml-training-pod-reusable",
-            arguments=train_arguments
-        )
-
-    @task
-    def evaluate_and_promote_model_task() -> KubernetesPodOperator:
-        """Defines the evaluation pod by calling the helper function."""
-        evaluate_arguments = [
-            "/app/evaluate.py",
-            "--registered_model_name",f"{ MODEL_NAME }",
-            "--challenger_alias", "challenger",
-            "--champion_alias", "champion",
-            "--data_file",  f"/data/{OUTPUT_DATASET_FILENAME}",
-            "--run_source", "airflow",
-            "--rows_to_load",f"{ dag.params['rows_to_load'] }",
-        ]
-        return create_ml_pod_operator(
-            task_id="evaluate_and_promote_model",
-            pod_name="ml-evaluation-pod-reusable",
-            arguments=evaluate_arguments
-        )
-
-    # --- 3. Define Task Dependencies ---
-    train_op = train_model_task()
-    evaluate_op = evaluate_and_promote_model_task()
+    train_arguments = [
+        "/app/train.py",
+        "--epochs", f"{ dag.params['epochs'] }",
+        "--learning_rate", f"{ dag.params['learning_rate'] }",
+        "--data_file", f"/data/{OUTPUT_DATASET_FILENAME}",
+        "--register_model",
+        "--rows_to_load",f"{ dag.params['rows_to_load'] }",
+        "--registered_model_name", f"{ MODEL_NAME }",
+        "--model_alias", "challenger",
+        "--run_source", "airflow",
+    ]   
+    evaluate_arguments = [
+        "/app/evaluate.py",
+        "--registered_model_name",f"{ MODEL_NAME }",
+        "--challenger_alias", "challenger",
+        "--champion_alias", "champion",
+        "--data_file",  f"/data/{OUTPUT_DATASET_FILENAME}",
+        "--run_source", "airflow",
+        "--rows_to_load",f"{ dag.params['rows_to_load'] }",
+    ]
+    
+    train_op =create_ml_pod_operator(
+        task_id="evaluate_and_promote_model",
+        pod_name="ml-evaluation-pod-reusable",
+        arguments=evaluate_arguments
+    )
+    evaluate_op =create_ml_pod_operator(
+        task_id="train_model",
+        pod_name="ml-training-pod-reusable",
+        arguments=train_arguments
+    )
 
     train_op >> evaluate_op
 
