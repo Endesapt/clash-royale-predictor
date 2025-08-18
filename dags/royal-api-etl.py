@@ -123,7 +123,7 @@ def api_to_minio_enrichment_dag():
                         team_deck_numbers.append(card_number)
                     else:
                         # Handle cases where a card might not be in your mapping dictionary
-                        print(f"Warning: Team card '{card_name}' not found in mapping dictionary.")
+                        log.info(f"Warning: Team card '{card_name}' not found in mapping dictionary.")
                 
                 opponent_cards = battle["opponent"][0]["cards"]
                 for card in opponent_cards:
@@ -134,7 +134,7 @@ def api_to_minio_enrichment_dag():
                         opponent_deck_numbers.append(card_number)
                     else:
                         # Handle cases where a card might not be in your mapping dictionary
-                        print(f"Warning: Opponent card '{card_name}' not found in mapping dictionary.")
+                        log.info(f"Warning: Opponent card '{card_name}' not found in mapping dictionary.")
                 
                 opponent_deck_numbers.sort()
                 team_deck_numbers.sort()
@@ -317,6 +317,7 @@ def create_ml_pod_operator(
     doc_md="### ML DAG with Reusable Pods and Secure Secrets",
     tags=["ml", "kubernetes"],
     params={
+        "rows_to_load": Param(default=1000000, type="integer", title="Rows to load"),
         "epochs": Param(default=5, type="integer", title="Epochs"),
         "learning_rate": Param(default=0.001, type="number", title="Learning Rate"),
     },
@@ -335,6 +336,7 @@ def ml_training_pipeline():
             "--learning_rate", f"{ dag.params.learning_rate }",
             "--data_file", f"/data/{OUTPUT_DATASET_FILENAME}",
             "--register_model",
+            "--rows_to_load",f"{ dag.params.rows_to_load }",
             "--registered_model_name", f"{ MODEL_NAME }",
             "--model_alias", "challenger",
             "--run_source", "airflow",
@@ -355,6 +357,7 @@ def ml_training_pipeline():
             "--champion_alias", "champion",
             "--data_file",  f"/data/{OUTPUT_DATASET_FILENAME}",
             "--run_source", "airflow",
+            "--rows_to_load",f"{ dag.params.rows_to_load }",
         ]
         return create_ml_pod_operator(
             task_id="evaluate_and_promote_model",
