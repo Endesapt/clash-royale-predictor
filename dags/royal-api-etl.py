@@ -362,9 +362,7 @@ with DAG(
     train_op >> evaluate_op
 
 # Instantiate the DAG
-api_to_minio_enrichment_dag()
-
-test_dag=ml_training_pipeline()
+test_dag=api_to_minio_enrichment_dag()
 
 if __name__ == "__main__":
     current_file_path = os.path.abspath(__file__)
