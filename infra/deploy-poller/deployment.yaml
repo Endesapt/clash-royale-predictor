@@ -24,6 +24,7 @@ spec:
         envFrom:
           - configMapRef:
               name: mlflow-poller-config
+        imagePullPolicy: Always
         env:
           - name: GITHUB_TOKEN
             valueFrom:

@@ -23,9 +23,11 @@ jobs:
       - name: Validate Environment
         id: validate
         run: |
-          env="${{ github.event.client_payload.environment }}"
-          if [[ "$env" == "stage" || "$env" == "prod" ]]; then
-            echo "environment=${env}" >> $GITHUB_OUTPUT
+          alias="${{ github.event.client_payload.alias }}"
+          if [[ "$alias" == "champion"  ]]; then
+            echo "environment=stage" >> $GITHUB_OUTPUT
+          elif [[ "$alias" == "production"  ]]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
           else
             echo "Invalid environment: $env"
             exit 1

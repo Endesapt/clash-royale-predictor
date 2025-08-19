@@ -5,6 +5,7 @@ import time
 import threading
 from mlflow import MlflowClient
 from mlflow.exceptions import MlflowException
+import logging
 
 
 # --- Environment Variables ---
@@ -22,7 +23,7 @@ PROCESSED_EVENTS = set()
 
 def trigger_github_action(model_name, version, alias, model_uri):
     """Constructs the payload and sends a dispatch request to GitHub Actions."""
-    print(f"Triggering GitHub Action for {model_name} v{version} with alias '{alias}'")
+    logging.info(f"Triggering GitHub Action for {model_name} v{version} with alias '{alias}'")
 
     github_payload = {
         "event_type": "deploy-model-event",
@@ -44,22 +45,22 @@ def trigger_github_action(model_name, version, alias, model_uri):
     try:
         response = requests.post(url, headers=headers, json=github_payload)
         response.raise_for_status()
-        print(f"Successfully triggered GitHub Action for {model_name} v{version}.")
+        logging.info(f"Successfully triggered GitHub Action for {model_name} v{version}.")
         return True
     except requests.exceptions.RequestException as e:
-        print(f"Error triggering GitHub Action: {e}")
-        print(f"Response: {e.response.text if e.response else 'No response'}")
+        logging.error(f"Error triggering GitHub Action: {e}")
+        logging.error(f"Response: {e.response.text if e.response else 'No response'}")
         return False
 
 def poll_mlflow_for_aliases():
     """The main polling loop that checks MLflow for new model aliases."""
-    print("--- Starting MLflow Polling Service ---")
+    logging.info("--- Starting MLflow Polling Service ---")
     if TARGET_MODEL_NAME:
-        print(f"Mode: Tracking specific model -> '{TARGET_MODEL_NAME}'")
+        logging.info(f"Mode: Tracking specific model -> '{TARGET_MODEL_NAME}'")
     else:
-        print("Mode: Tracking ALL registered models.")
-    print(f"Polling Interval: {POLLING_INTERVAL} seconds")
-    print(f"Target Aliases: {TARGET_ALIASES}")
+        logging.info("Mode: Tracking ALL registered models.")
+    logging.info(f"Polling Interval: {POLLING_INTERVAL} seconds")
+    logging.info(f"Target Aliases: {TARGET_ALIASES}")
 
     while True:
         try:
@@ -68,18 +69,18 @@ def poll_mlflow_for_aliases():
 
             # --- MODIFIED: Logic to select which models to poll ---
             if TARGET_MODEL_NAME:
-                print(f"Polling for specific model: '{TARGET_MODEL_NAME}'")
+                logging.info(f"Polling for specific model: '{TARGET_MODEL_NAME}'")
                 try:
                     # Get the specific registered model and put it in a list to iterate
                     model_obj = mlflow_client.get_registered_model(name=TARGET_MODEL_NAME)
                     models_to_check.append(model_obj)
                 except MlflowException as e:
                     if "RESOURCE_DOES_NOT_EXIST" in str(e):
-                        print(f"Warning: Target model '{TARGET_MODEL_NAME}' not found. Will try again next cycle.")
+                        logging.info(f"Warning: Target model '{TARGET_MODEL_NAME}' not found. Will try again next cycle.")
                     else:
                         raise e # Re-raise other MLflow exceptions
             else:
-                print("Polling for all registered models...")
+                logging.info("Polling for all registered models...")
                 # Get all registered models
                 models_to_check = mlflow_client.search_registered_models()
 
@@ -93,7 +94,7 @@ def poll_mlflow_for_aliases():
                         event_key = f"{model.name}:{model_version_details.version}:{alias}"
 
                         if event_key not in PROCESSED_EVENTS:
-                            print(f"New event detected: Model '{model.name}' version '{model_version_details.version}' now has alias '{alias}'.")
+                            logging.info(f"New event detected: Model '{model.name}' version '{model_version_details.version}' now has alias '{alias}'.")
                             success = trigger_github_action(
                                 model_name=model.name,
                                 version=model_version_details.version,
@@ -107,12 +108,12 @@ def poll_mlflow_for_aliases():
                         if "RESOURCE_DOES_NOT_EXIST" in str(e):
                             pass 
                         else:
-                            print(f"An MLflow error occurred for model '{model.name}': {e}")
+                            logging.warning(f"An MLflow error occurred for model '{model.name}': {e}")
             
-            print(f"Polling cycle complete. Waiting {POLLING_INTERVAL} seconds.")
+            logging.info(f"Polling cycle complete. Waiting {POLLING_INTERVAL} seconds.")
 
         except Exception as e:
-            print(f"An unexpected error occurred in the polling loop: {e}")
+            logging.error(f"An unexpected error occurred in the polling loop: {e}")
         
         time.sleep(POLLING_INTERVAL)
 
