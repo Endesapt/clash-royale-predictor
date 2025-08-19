@@ -35,12 +35,7 @@ jobs:
 
       - name: Set up Kubeconfig
         run: |
-          # This step is specific to your cloud provider after authentication
-          # gcloud container clusters get-credentials YOUR_CLUSTER_NAME --zone YOUR_ZONE
-          # aws eks update-kubeconfig --name YOUR_CLUSTER_NAME --region YOUR_REGION
-          echo "Kubeconfig setup is required here."
-          # If using a secret, you would do:
-          # echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
 
       - name: Setup Kustomize
         uses: imranismail/setup-kustomize@v2

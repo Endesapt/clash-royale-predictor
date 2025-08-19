@@ -26,6 +26,8 @@ spec:
               name: mlflow-poller-config
         imagePullPolicy: Always
         env:
+          - name: PYTHONUNBUFFERED
+            value: "0"
           - name: GITHUB_TOKEN
             valueFrom:
               secretKeyRef:
