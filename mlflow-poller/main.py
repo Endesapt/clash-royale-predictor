@@ -5,14 +5,7 @@ import time
 import threading
 from mlflow import MlflowClient
 from mlflow.exceptions import MlflowException
-from flask import Flask
 
-# --- Flask App for Health Checks ---
-app = Flask(__name__)
-
-@app.route("/health")
-def health_check():
-    return "OK", 200
 
 # --- Environment Variables ---
 GITHUB_REPO = os.environ.get("GITHUB_REPO")
@@ -42,8 +35,9 @@ def trigger_github_action(model_name, version, alias, model_uri):
     }
 
     headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json",
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version":"2022-11-28"
     }
     url = f"https://api.github.com/repos/{GITHUB_REPO}/dispatches"
 
@@ -127,6 +121,4 @@ if __name__ == "__main__":
     if not all([GITHUB_REPO, GITHUB_TOKEN, MLFLOW_TRACKING_URI]):
         raise ValueError("Missing one or more required environment variables: GITHUB_REPO, GITHUB_TOKEN, MLFLOW_TRACKING_URI")
 
-    polling_thread = threading.Thread(target=poll_mlflow_for_aliases, daemon=True)
-    polling_thread.start()
-    app.run(host='0.0.0.0', port=8080)
+    poll_mlflow_for_aliases()
