@@ -99,7 +99,7 @@ def poll_mlflow_for_aliases():
                                 model_name=model.name,
                                 version=model_version_details.version,
                                 alias=alias,
-                                model_uri=model_version_details.source
+                                model_uri=f"s3://mlflow/models/{model_version_details.model_id}/artifacts"
                             )
                             if success:
                                 PROCESSED_EVENTS.add(event_key)

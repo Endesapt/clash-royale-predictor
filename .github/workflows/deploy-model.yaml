@@ -57,4 +57,4 @@ jobs:
         run: |
           TARGET_ENV=${{ steps.validate.outputs.environment }}
           echo "Applying kustomization for environment: $TARGET_ENV"
-          kustomize build infra/predictor-deploy/${TARGET_ENV} | kubectl apply -f -
+          kustomize build infra/deploy-predictor/${TARGET_ENV} | kubectl apply -f -

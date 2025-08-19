@@ -1,11 +1,11 @@
-apiVersion: v1
-kind: Secret
-metadata:
-  name: minio-credentials
-type: Opaque
-data:
-  AWS_ACCESS_KEY_ID: admin
-  AWS_SECRET_ACCESS_KEY: GuVofzEfVwLr
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: minio-credentials
+# type: Opaque
+# data:
+#   AWS_ACCESS_KEY_ID: <your key id>
+#   AWS_SECRET_ACCESS_KEY: <your access key>
 ---
 apiVersion: v1
 kind: ServiceAccount
