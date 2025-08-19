@@ -20,7 +20,7 @@ TARGET_MODEL_NAME = os.environ.get("TARGET_MODEL_NAME") # If not set, this will 
 
 # --- In-Memory State ---
 PROCESSED_EVENTS = set()
-
+logging.getLogger().setLevel(logging.INFO)
 def trigger_github_action(model_name, version, alias, model_uri):
     """Constructs the payload and sends a dispatch request to GitHub Actions."""
     logging.info(f"Triggering GitHub Action for {model_name} v{version} with alias '{alias}'")
@@ -91,15 +91,18 @@ def poll_mlflow_for_aliases():
                             name=model.name,
                             alias=alias
                         )
+                        
                         event_key = f"{model.name}:{model_version_details.version}:{alias}"
 
                         if event_key not in PROCESSED_EVENTS:
                             logging.info(f"New event detected: Model '{model.name}' version '{model_version_details.version}' now has alias '{alias}'.")
+                            model_id=model_version_details.source.split("/")[1]
+                            print(f"s3://mlflow/models/{model_id}/artifacts")
                             success = trigger_github_action(
                                 model_name=model.name,
                                 version=model_version_details.version,
                                 alias=alias,
-                                model_uri=f"s3://mlflow/models/{model_version_details.model_id}/artifacts"
+                                model_uri=f"s3://mlflow/models/{model_id}/artifacts"
                             )
                             if success:
                                 PROCESSED_EVENTS.add(event_key)
