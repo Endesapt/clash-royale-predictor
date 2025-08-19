@@ -1,0 +1,62 @@
+# .github/workflows/deploy-model.yml
+name: Deploy Model from MLflow
+
+on:
+  repository_dispatch:
+    types: [deploy-model-event]
+
+jobs:
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log incoming payload
+        run: |
+          echo "Triggering environment: ${{ github.event.client_payload.environment }}"
+          echo "Model Name: ${{ github.event.client_payload.model_name }}"
+          echo "Model Version: ${{ github.event.client_payload.model_version }}"
+          echo "Model URI: ${{ github.event.client_payload.model_uri }}"
+
+      - name: Validate Environment
+        id: validate
+        run: |
+          env="${{ github.event.client_payload.environment }}"
+          if [[ "$env" == "stage" || "$env" == "prod" ]]; then
+            echo "environment=${env}" >> $GITHUB_OUTPUT
+          else
+            echo "Invalid environment: $env"
+            exit 1
+          fi
+
+      - name: Set up Kubeconfig
+        run: |
+          # This step is specific to your cloud provider after authentication
+          # gcloud container clusters get-credentials YOUR_CLUSTER_NAME --zone YOUR_ZONE
+          # aws eks update-kubeconfig --name YOUR_CLUSTER_NAME --region YOUR_REGION
+          echo "Kubeconfig setup is required here."
+          # If using a secret, you would do:
+          # echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+
+      - name: Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Update Model URI in Manifest
+        run: |
+          TARGET_ENV=${{ steps.validate.outputs.environment }}
+          MODEL_URI="${{ github.event.client_payload.model_uri }}"
+          
+          # Navigate to the base directory and replace the placeholder
+          cd infra/deploy-predictor/base
+          sed -i "s|MODEL_STORAGE_URI_PLACEHOLDER|${MODEL_URI}|g" inferenceservice.yaml
+          echo "Updated inferenceservice.yaml:"
+          cat inferenceservice.yaml
+          cd ../../..
+
+      - name: Deploy to Kubernetes
+        run: |
+          TARGET_ENV=${{ steps.validate.outputs.environment }}
+          echo "Applying kustomization for environment: $TARGET_ENV"
+          kustomize build infra/predictor-deploy/${TARGET_ENV} | kubectl apply -f -
