@@ -35,6 +35,7 @@ jobs:
 
       - name: Set up Kubeconfig
         run: |
+          mkdir ~/.kube
           echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
 
       - name: Setup Kustomize
