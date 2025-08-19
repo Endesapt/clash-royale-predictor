@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mlflow-webhook-config
+  namespace: mlflow-webhook
+data:
+  GITHUB_REPO: "Endesapt/clash-royale-predictor"
+  MLFLOW_TRACKING_URI: "http://mlflow.mlflow:5000" 
+  POLLING_INTERVAL: "60"
+  TARGET_MODEL_NAME: "clash-predictor"
