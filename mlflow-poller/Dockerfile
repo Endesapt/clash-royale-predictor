@@ -8,4 +8,5 @@ COPY main.py .
 
 EXPOSE 8080
 
-CMD ["python", "main.py"]
+ENV PYTHONUNBUFFERED 1
+CMD ["python","-u", "main.py"]
