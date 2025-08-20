@@ -34,6 +34,7 @@ DATASET_NAME="clash-royale"
 DATETIME_STRING=datetime.now().strftime('%d-%m-%Y')
 OUTPUT_DATASET_FILENAME = f"enriched_data.csv"
 OUTPUT_DICT_FILENAME = f"number_to_card.csv"
+OUTPUT_CARDS_FILENAME="cards.json"
 
 # define mlflow vars
 MLFLOW_TRACKING_URI="http://mlflow.ddns.net"
@@ -47,7 +48,6 @@ log = logging.getLogger(__name__)
 
 dict_dataset= Dataset(f's3://{MINIO_BUCKET}/{DATASET_NAME}/{OUTPUT_DICT_FILENAME}')
 enriched_data_dataset= Dataset(f's3://{MINIO_BUCKET}/{DATASET_NAME}/{OUTPUT_DATASET_FILENAME}')
-
 @dag(
     dag_id="api_to_minio_enrichment_dag",
     start_date=datetime(2025, 8, 10),
@@ -69,7 +69,7 @@ def api_to_minio_enrichment_dag():
     """
 
     @task
-    def get_decks_from_api() -> tuple[list[list],dict]:
+    def get_decks_from_api() -> tuple[list[list],dict,dict]:
         """
         Task 1: Fetches decks from latest games of 1000 best players in ClashRoyale.
         """
@@ -88,9 +88,9 @@ def api_to_minio_enrichment_dag():
         card_name_to_number["<Start of deck>"]=len(card_name_to_number)
 
         # get latest season
-        seasons_responce = http_hook.run_with_advanced_retry(endpoint="v1/locations/global/seasonsV2", _retry_args=retry_args)    
+        seasons_responce = http_hook.run_with_advanced_retry(endpoint="v1/locations/global/seasons", _retry_args=retry_args)    
         
-        last_season_id = seasons_responce.json()["items"][-1]["code"]
+        last_season_id = seasons_responce.json()["items"][-1]["id"]
         log.info(f"Successfully fetched last_season_id: {last_season_id}.")
 
         # get best players
@@ -144,18 +144,19 @@ def api_to_minio_enrichment_dag():
 
         unique_decks_tuple = set(tuple(deck) for deck in all_decks)
         unique_decks_list = [list(deck) for deck in unique_decks_tuple]
-        return (unique_decks_list,card_name_to_number)
+        return (unique_decks_list,card_name_to_number,cards_responce.json()["items"])
  
             
 
 
-    @task(outlets=[dict_dataset,enriched_data_dataset])
-    def enrich_data(raw_data: tuple[list[list],dict]):
+    @task(outlets=[])#dict_dataset,enriched_data_dataset
+    def enrich_data(raw_data: tuple[list[list],dict,dict]):
         """
         Task 2: Enriches the data by adding a new column with the processing timestamp.
         """
         data=raw_data[0]
         card_name_to_number=raw_data[1]
+        cards_json=raw_data[2]
         if not data:
             log.warning("No data received for enrichment.")
             return []
@@ -228,6 +229,23 @@ def api_to_minio_enrichment_dag():
             bucket_name=MINIO_BUCKET,
             replace=True  # Overwrite the file if it already exists
         )
+
+        cards_string=json.dumps(cards_json)
+        # saving cards and their urls for frontend
+        log.info(f"Uploading data to bucket '{MINIO_BUCKET}/{DATASET_NAME}/{DATETIME_STRING}' with key '{OUTPUT_CARDS_FILENAME}'")
+        s3_hook.load_string(
+            string_data=cards_string,
+            key=f"{DATASET_NAME}/{DATETIME_STRING}/{OUTPUT_CARDS_FILENAME}",
+            bucket_name=MINIO_BUCKET,
+            replace=True  # Overwrite the file if it already exists
+        )
+        s3_hook.load_string(
+            string_data=cards_string,
+            key=f"{DATASET_NAME}/{OUTPUT_CARDS_FILENAME}",
+            bucket_name=MINIO_BUCKET,
+            replace=True  # Overwrite the file if it already exists
+        )
+        
         
 
 
@@ -371,7 +389,7 @@ if __name__ == "__main__":
     parent_directory = os.path.dirname(current_file_path)
     with open(os.path.join(parent_directory,"..","include","connections.yaml")) as file:
         print(file.name)
-    dag.test(
+    test_dag.test(
         conn_file_path=os.path.join(parent_directory,"..","include","connections.yaml"),
         run_conf={"rows_to_load":10000}
     )
