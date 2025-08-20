@@ -54,8 +54,6 @@ function App() {
     setPredictions([]);
     setError(null);
   };
-
-  // Helper function to get predictions from the model
   const getPredictionsFromModel = async (currentDeck) => {
     const selectedCardIds = currentDeck.map(card => {
         for (const [key, value] of cardMap.entries()) {
@@ -94,11 +92,27 @@ function App() {
     const sumExps = exps.reduce((a, b) => a + b, 0);
     const probabilities = exps.map(e => e / sumExps);
 
-    const topPredictions = probabilities
-        .map((prob, index) => ({ card: cardMap.get(index), probability: prob }))
-        .filter(p => p.card) // Ensure card exists
-        .sort((a, b) => b.probability - a.prob)
-        .slice(0, 10); // Get more predictions to have a better chance after filtering
+    // --- FIX IS HERE ---
+
+    // 1. Create an array of objects, pairing each probability with its original index
+    const allPredictions = probabilities.map((prob, index) => ({
+      index: index, // The actual card index predicted by the model
+      probability: prob
+    }));
+
+    // 2. Sort this array to find the predictions with the highest probability
+    allPredictions.sort((a, b) => b.probability - a.probability);
+
+    // 3. Now, map the top-rated predictions to their actual card data
+    const topPredictions = allPredictions
+      .slice(0, 15) // Get a slightly larger slice to have options after filtering
+      .map(p => ({
+        card: cardMap.get(p.index), // Use the correct index from the sorted list
+        probability: p.probability
+      }))
+      .filter(p => p.card); // Ensure the card exists in our map
+
+    // --- END OF FIX ---
 
     // Filter out cards already in the deck
     const currentDeckIds = new Set(currentDeck.map(c => c.id));
