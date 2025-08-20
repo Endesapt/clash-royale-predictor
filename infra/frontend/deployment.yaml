@@ -45,16 +45,13 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: clash-royale-frontend-ingress
-  annotations:
-
-    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: nginx
   rules:
   - host: clashroyale.ddns.net
     http:
       paths:
-      - path: /
+      - path: /app
         pathType: Prefix
         backend:
           service:

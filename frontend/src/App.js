@@ -16,11 +16,11 @@ function App() {
     // Fetch card data and create mappings
     const fetchData = async () => {
       try {
-        const cardsResponse = await fetch('/cards.json');
+        const cardsResponse = await fetch('./cards.json');
         const cardsData = await cardsResponse.json();
         setCards(cardsData);
 
-        const csvResponse = await fetch('/number_to_card.csv');
+        const csvResponse = await fetch('./number_to_card.csv');
         const csvText = await csvResponse.text();
         const cardNames = csvText.split('\n')[1].split(',');
         const newCardMap = new Map();
