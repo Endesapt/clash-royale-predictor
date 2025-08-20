@@ -13,7 +13,7 @@ function App() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Fetch card data and create mappings
+    // This useEffect hook for fetching data remains the same...
     const fetchData = async () => {
       try {
         const cardsResponse = await fetch('./cards.json');
@@ -48,87 +48,112 @@ function App() {
     setSelectedCards(selectedCards.filter(card => card.id !== cardToRemove.id));
   };
 
-  const handleGeneratePredictions = async () => {
-    if (selectedCards.length === 0) return;
+  // New function to clear the deck
+  const handleClearDeck = () => {
+    setSelectedCards([]);
+    setPredictions([]);
+    setError(null);
+  };
+
+  // Helper function to get predictions from the model
+  const getPredictionsFromModel = async (currentDeck) => {
+    const selectedCardIds = currentDeck.map(card => {
+        for (const [key, value] of cardMap.entries()) {
+            if (value.id === card.id) return key;
+        }
+        return -1;
+    }).filter(id => id !== -1);
+
+    const MAX_LENGTH = window.APP_CONFIG?.MAX_LENGTH || 7;
+    const PADDING_IDX = window.APP_CONFIG?.PADDING_IDX || 120;
+    const INFERENCE_URL = window.APP_CONFIG?.INFERENCE_URL || "http://clashroyale.ddns.net/v2/models/clashroyale/infer";
+
+    let paddedList = [...selectedCardIds];
+    if (paddedList.length < MAX_LENGTH) {
+        const numPadding = MAX_LENGTH - paddedList.length;
+        paddedList = Array(numPadding).fill(PADDING_IDX).concat(paddedList);
+    } else if (paddedList.length > MAX_LENGTH) {
+        paddedList = paddedList.slice(paddedList.length - MAX_LENGTH);
+    }
+
+    const requestBody = {
+        inputs: [{ name: "input-0", shape: [1, MAX_LENGTH], datatype: "INT64", data: [paddedList] }]
+    };
+
+    const response = await fetch(INFERENCE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const responseData = await response.json();
+    const outputData = responseData.outputs[0].data;
+    const exps = outputData.map(Math.exp);
+    const sumExps = exps.reduce((a, b) => a + b, 0);
+    const probabilities = exps.map(e => e / sumExps);
+
+    const topPredictions = probabilities
+        .map((prob, index) => ({ card: cardMap.get(index), probability: prob }))
+        .filter(p => p.card) // Ensure card exists
+        .sort((a, b) => b.probability - a.prob)
+        .slice(0, 10); // Get more predictions to have a better chance after filtering
+
+    // Filter out cards already in the deck
+    const currentDeckIds = new Set(currentDeck.map(c => c.id));
+    return topPredictions.filter(p => !currentDeckIds.has(p.card.id));
+  };
+
+  // Renamed from handleGeneratePredictions to be more specific
+  const handleSuggestNextCards = async () => {
+    if (selectedCards.length === 0 || selectedCards.length >= 8) return;
     setLoading(true);
     setError(null);
     setPredictions([]);
 
-    const selectedCardIds = selectedCards.map(card => {
-        for (const [key, value] of cardMap.entries()) {
-            if (value.id === card.id) {
-                return key;
-            }
-        }
-        return -1; // Should not happen with valid data
-    }).filter(id => id !== -1);
-    console.log(selectedCardIds)
-
     try {
-        const MAX_LENGTH = window.APP_CONFIG?.MAX_LENGTH || 7;
-        const PADDING_IDX = window.APP_CONFIG?.PADDING_IDX || 120;
-        const INFERENCE_URL = window.APP_CONFIG?.INFERENCE_URL || "http://clashroyale.ddns.net/v2/models/clashroyale/infer";
-
-
-        let paddedList = [...selectedCardIds];
-        if (paddedList.length < MAX_LENGTH) {
-            const numPadding = MAX_LENGTH - paddedList.length;
-            paddedList = Array(numPadding).fill(PADDING_IDX).concat(paddedList);
-        } else if (paddedList.length > MAX_LENGTH) {
-            paddedList = paddedList.slice(paddedList.length - MAX_LENGTH);
-        }
-
-
-        const requestBody = {
-            "inputs": [
-                {
-                    "name": "input-0",
-                    "shape": [1, MAX_LENGTH],
-                    "datatype": "INT64",
-                    "data": [paddedList]
-                }
-            ]
-        };
-
-        const response = await fetch(INFERENCE_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestBody)
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const responseData = await response.json();
-        const outputData = responseData.outputs[0].data;
-
-        // Simple softmax
-        const exps = outputData.map(Math.exp);
-        const sumExps = exps.reduce((a, b) => a + b, 0);
-        const probabilities = exps.map(e => e / sumExps);
-
-        const top5 = probabilities
-            .map((prob, index) => ({ prob, index }))
-            .sort((a, b) => b.prob - a.prob)
-            .slice(0, 5);
-
-        const predictedCards = top5.map(p => ({
-            card: cardMap.get(p.index),
-            probability: p.prob
-        }));
-
-        setPredictions(predictedCards);
+        const filteredPredictions = await getPredictionsFromModel(selectedCards);
+        setPredictions(filteredPredictions.slice(0, 5)); // Show top 5 valid predictions
     } catch (err) {
-        setError('Failed to get predictions from the model.');
+        setError('Failed to get suggestions from the model.');
         console.error(err);
     } finally {
         setLoading(false);
     }
   };
 
+  // New function to generate a full deck automatically
+  const handleGenerateFullDeck = async () => {
+    if (selectedCards.length === 0 || selectedCards.length >= 8) return;
+    setLoading(true);
+    setError(null);
+    setPredictions([]);
+
+    let currentDeck = [...selectedCards];
+
+    try {
+      while (currentDeck.length < 8) {
+        const filteredPredictions = await getPredictionsFromModel(currentDeck);
+
+        if (filteredPredictions.length === 0) {
+          throw new Error("Model could not suggest a valid next card.");
+        }
+
+        // Choose one of the top 2 valid predictions
+        const poolSize = Math.min(2, filteredPredictions.length);
+        const chosenPrediction = filteredPredictions[Math.floor(Math.random() * poolSize)];
+        
+        currentDeck.push(chosenPrediction.card);
+      }
+      setSelectedCards(currentDeck);
+    } catch (err) {
+        setError(`Failed to generate a full deck. ${err.message}`);
+        console.error(err);
+    } finally {
+        setLoading(false);
+    }
+  };
 
   return (
     <div className="App">
@@ -140,9 +165,11 @@ function App() {
             <SelectedDeck
                 selectedCards={selectedCards}
                 onCardRemove={handleCardRemove}
-                onGenerate={handleGeneratePredictions}
+                onSuggest={handleSuggestNextCards}
+                onGenerateFullDeck={handleGenerateFullDeck}
+                onClear={handleClearDeck}
                 />
-            {loading && <p>Loading predictions...</p>}
+            {loading && <p>Loading...</p>}
             {error && <p className="error">{error}</p>}
             {predictions.length > 0 && <PredictedCards predictedCards={predictions} onCardSelect={handleCardSelect} />}
         </div>
