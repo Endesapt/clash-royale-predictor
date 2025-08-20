@@ -1,0 +1,63 @@
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clash-royale-frontend-deployment
+  labels:
+    app: clash-royale-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: clash-royale-frontend
+  template:
+    metadata:
+      labels:
+        app: clash-royale-frontend
+    spec:
+      containers:
+      - name: frontend-container
+        image: ghcr.io/endesapt/clash-royale-predictor-frontend:main
+        ports:
+        - containerPort: 80
+        env:
+        - name: REACT_APP_MAX_LENGTH
+          value: "7"
+        - name: REACT_APP_PADDING_IDX
+          value: "120"
+        - name: REACT_APP_INFERENCE_URL
+          value: "http://clashroyale.ddns.net/v2/models/clashroyale/infer"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clash-royale-frontend-service
+spec:
+  selector:
+    app: clash-royale-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: clash-royale-frontend-ingress
+  annotations:
+
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: clashroyale.ddns.net
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: clash-royale-frontend-service
+            port:
+              number: 80
