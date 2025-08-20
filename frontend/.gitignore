@@ -6,7 +6,8 @@ node_modules/
 .pnp.js
 # testing
 /coverage
-
+# for testing
+!*.csv
 # production
 /build
 

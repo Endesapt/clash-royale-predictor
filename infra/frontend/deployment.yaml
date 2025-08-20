@@ -18,6 +18,7 @@ spec:
       containers:
       - name: frontend-container
         image: ghcr.io/endesapt/clash-royale-predictor-frontend:main
+        imagePullPolicy: Always
         ports:
         - containerPort: 80
         env:
